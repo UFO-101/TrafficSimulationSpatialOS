@@ -1,0 +1,19 @@
+package mapandcars;
+import "improbable/standard_library.schema";
+
+type Vector3f{
+    float x = 1;
+    float y = 2;
+    float z = 3;
+}
+
+component Car {
+    id = 1001;
+    float speed = 1;
+    Vector3f direction = 2;
+}
+
+component OsmWay {
+    id=1003;
+    list<EntityId> nodes = 1;
+}
