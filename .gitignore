@@ -9,6 +9,7 @@ improbable
 build
 ci
 logs
+.vscode
 
 # C# worker auto-generated project files
 spatialos.csharp.build.json
