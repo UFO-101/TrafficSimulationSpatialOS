@@ -34,7 +34,7 @@ namespace OpenStreetMap
         /// <summary>
         /// Node ID.
         /// </summary>
-        public ulong ID { get; private set; }
+        public ulong Id { get; private set; }
 
         /// <summary>
         /// Latitude position of the node.
@@ -78,7 +78,7 @@ namespace OpenStreetMap
         public OsmNode(XmlNode node, OsmNode firstNode)
         {
             // Get the attribute values
-            ID = GetAttribute<ulong>("id", node.Attributes);
+            Id = GetAttribute<ulong>("id", node.Attributes);
             Latitude = GetAttribute<float>("lat", node.Attributes);
             Longitude = GetAttribute<float>("lon", node.Attributes);
 
@@ -92,14 +92,14 @@ namespace OpenStreetMap
                 coords = new Coordinates(X - firstNode.X, 0, Y - firstNode.Y);
         }
 
-        public void addAdjacentNode(ulong adjacentNodeID)
+        public void addAdjacentNode(ulong adjacentNodeId)
         {
-            adjacentNodes.Add(adjacentNodeID);
+            adjacentNodes.Add(adjacentNodeId);
         }
 
-        public void addWayOn(ulong wayOnID)
+        public void addWayOn(ulong wayOnId)
         {
-            waysOn.Add(wayOnID);
+            waysOn.Add(wayOnId);
         }
     }
 }

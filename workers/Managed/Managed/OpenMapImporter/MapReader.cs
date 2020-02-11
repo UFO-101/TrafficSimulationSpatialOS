@@ -65,7 +65,7 @@ namespace OpenStreetMap
                 OsmNode node = new OsmNode(n, firstNode);
                 if(firstNode == null)
                     firstNode = node;
-                nodes[node.ID] = node;
+                nodes[node.Id] = node;
             }
         }
 
@@ -80,14 +80,16 @@ namespace OpenStreetMap
                 ulong prevNode = 0;
                 bool setPrevNode = false;
                 foreach(ulong nodeID in way.NodeIDs){
-                    nodes[nodeID].addWayOn(way.ID);
-                    if(setPrevNode)
-                    {
-                        nodes[prevNode].addAdjacentNode(nodeID);
-                        nodes[nodeID].addAdjacentNode(prevNode);
+                    if(way.IsRoad){
+                        nodes[nodeID].addWayOn(way.ID);
+                        if(setPrevNode)
+                        {
+                            nodes[prevNode].addAdjacentNode(nodeID);
+                            nodes[nodeID].addAdjacentNode(prevNode);
+                        }
+                        prevNode = nodeID;
+                        setPrevNode = true;
                     }
-                    prevNode = nodeID;
-                    setPrevNode = true;
                 }
             }
         }

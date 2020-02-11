@@ -24,6 +24,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Managed\Startup.cs" />
+    <Compile Include="Managed\OpenMapImporter\*.cs" />
+    <Compile Include="Managed\OpenMapImporter\Serialization\*.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="CsharpWorker.targets" />

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Xml;
+using System.Linq;
 
 /*
     Copyright (c) 2017 Sloan Kelly
@@ -22,15 +23,14 @@ using System.Xml;
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 */
-
-
 namespace OpenStreetMap
-{
+{    
     /// <summary>
     /// An OSM object that describes an arrangement of OsmNodes into a shape or road.
     /// </summary>
     public class OsmWay : BaseOsm
     {
+        string[] not_proper_driving_road_values = {"pedestrian", "bus_guideway", "escape", "raceway", "footway", "bridleway", "steps", "corridor", "path", "cycleway"};
         /// <summary>
         /// Way ID.
         /// </summary>
@@ -106,6 +106,10 @@ namespace OpenStreetMap
 
             // Read the tags
             XmlNodeList tags = node.SelectNodes("tag");
+            bool highway = false;
+            bool serviceRoad = false;
+            bool disqualifiedAsRoad = false;
+            bool hasMaxspeed = false;
             foreach (XmlNode t in tags)
             {
                 string key = GetAttribute<string>("k", t.Attributes);
@@ -119,11 +123,16 @@ namespace OpenStreetMap
                 }
                 else if (key == "building")
                 {
-                    IsBuilding = true; // GetAttribute<string>("v", t.Attributes) == "yes";
+                    IsBuilding = true;
                 }
                 else if (key == "highway")
                 {
-                    IsRoad = true;
+                    highway = true;
+                    if(not_proper_driving_road_values.Contains(GetAttribute<string>("v", t.Attributes))){
+                        disqualifiedAsRoad = true;
+                    } else if (GetAttribute<string>("v", t.Attributes) == "service"){
+                        serviceRoad = true;
+                    }
                 }
                 else if (key=="lanes")
                 {
@@ -133,6 +142,22 @@ namespace OpenStreetMap
                 {
                     Name = GetAttribute<string>("v", t.Attributes);
                 }
+                else if (key=="access" && GetAttribute<string>("v", t.Attributes) == "no")
+                {
+                    disqualifiedAsRoad = true;                    
+                }
+                else if (key=="service")
+                {
+                    disqualifiedAsRoad = true;                    
+                }
+                else if (key=="maxspeed")
+                {
+                    hasMaxspeed = true;
+                }
+
+            }
+            if(highway && !disqualifiedAsRoad && !(serviceRoad && !hasMaxspeed)){
+                IsRoad = true;
             }
         }
     }
