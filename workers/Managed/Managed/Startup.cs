@@ -15,18 +15,22 @@ namespace Managed
 {
     internal class Startup
     {
+        // Simulation parameters
+        private const double carSpeed = 4;
+        private const double upateInterval = 0.05;
+        private const int numberOfCars = 10;
+
+        // SpatialOS necesities
         private const string WorkerType = "Managed";
-
         private const string LoggerName = "Startup.cs";
-
         private const int ErrorExitStatus = 1;
-
         private const uint GetOpListTimeoutInMilliseconds = 100;
 
         private static Connection ClassConnection;
         private static Dispatcher ClassDispatcher;
         private static bool ClassIsConnected;
 
+        // My utility variables
         private static List<EntityId> carEntityIds = new List<EntityId>();
         private static List<Coordinates> carPositions = new List<Coordinates>();
 
@@ -105,7 +109,7 @@ namespace Managed
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Can't read map file");
                 }
 
-                for(int i = 0; i < 100; i++)
+                for(int i = 0; i < numberOfCars; i++)
                 {
                     CreateCarEntity(dispatcher, connection);
                 }       
@@ -119,7 +123,7 @@ namespace Managed
 
                 EntityId id;
                 EntityId previousRoadNodeID = new EntityId(232242);
-                Coordinates pos, newPos;//, newNodePos;
+                Coordinates startPos, newPos;//, newNodePos;
                 //double xRatio, zRatio;
                 Random random = new Random();
                 bool firstIteration = true;
@@ -129,51 +133,56 @@ namespace Managed
 
                 while (isConnected)
                 {                    
-                    if(timer.Elapsed.TotalSeconds >= 0.05)
+                    if(timer.Elapsed.TotalSeconds >= upateInterval)
                     {
                         for(int i = 0; i < carEntityIds.Count; i++)
                         {
-                            if(!firstIteration){
-                                var reverseUpdate = Improbable.Metadata.Update.FromInitialData(new MetadataData("Road Node"));
-                                ClassConnection.SendComponentUpdate(Improbable.Metadata.Metaclass, previousRoadNodeID, reverseUpdate);
-                            }
+                            startPos = carPositions[i];
+                            ulong startNode = carNodeIds[i];
+                            List<Coordinates> pathCoords = new List<Coordinates>(new Coordinates[]{mapReader.nodes[startNode].coords});
+                            List<ulong> pathNodes = new List<ulong>(new ulong[]{startNode});
+                            double pathLength = 0;
 
-                            id = carEntityIds[i];
-                            OsmNode currentCarNode;
-                            if(!mapReader.nodes.TryGetValue(carNodeIds[i], out currentCarNode)) {
-                                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find current car node");
-                            }
-                            //pos = carPositions[i];
-
-                            OsmNode newNode;
-                            bool newNodeInRoadNodes = false;
-                            do{
-                                ulong adjacentNodeId = currentCarNode.adjacentNodes[random.Next(currentCarNode.adjacentNodes.Count)];
-                                if(!mapReader.nodes.TryGetValue(adjacentNodeId, out newNode)){
-                                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find adjacent node");
+                            do {
+                                if(!firstIteration){
+                                    var reverseUpdate = Improbable.Metadata.Update.FromInitialData(new MetadataData("Road Node"));
+                                    ClassConnection.SendComponentUpdate(Improbable.Metadata.Metaclass, previousRoadNodeID, reverseUpdate);
                                 }
-                                if(!roadNodeIds.Contains(adjacentNodeId)){
-                                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "adjacent node is not in road nodes");
-                                }                                
-                                newNodeInRoadNodes = roadNodeIds.Contains(adjacentNodeId);
+
+                                id = carEntityIds[i];
+                                OsmNode currentCarNode;
+                                if(!mapReader.nodes.TryGetValue(pathNodes.Last(), out currentCarNode)) {
+                                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find current car node");
+                                }
+
+                                bool newNodeInRoadNodes = false;
+                                ulong adjacentNodeId = 0;
+                                do{
+                                    adjacentNodeId = currentCarNode.adjacentNodes[random.Next(currentCarNode.adjacentNodes.Count)];
+                                    if(!mapReader.nodes.ContainsKey(adjacentNodeId)){
+                                        ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find adjacent node");
+                                    }
+                                    if(!roadNodeIds.Contains(adjacentNodeId)){
+                                        ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "adjacent node is not in road nodes");
+                                    }                                
+                                    newNodeInRoadNodes = roadNodeIds.Contains(adjacentNodeId);
+                                }
+                                while(adjacentNodeId == prevCarNodeIds[i] && currentCarNode.adjacentNodes.Count > 1);
+
+                                Coordinates newNodeCoords = mapReader.nodes[adjacentNodeId].coords;
+                                pathLength += CoordsDist(newNodeCoords, pathCoords.Last());
+                                pathCoords.Add(newNodeCoords);
+                                pathNodes.Add(adjacentNodeId);
                             }
-                            while(newNode.Id == prevCarNodeIds[i] && currentCarNode.adjacentNodes.Count > 1);
+                            while(pathLength < carSpeed);
+
                             prevCarNodeIds[i] = carNodeIds[i];
-                            carNodeIds[i] = newNode.Id;
-                            
-                            newPos = newNode.coords;                            
+                            carNodeIds[i] = pathNodes.Last();
+
+                            newPos = pathCoords.Last();
                             carPositions[i] = newPos;
                             var update = Improbable.Position.Update.FromInitialData(new PositionData(newPos));
-                            ClassConnection.SendComponentUpdate(Improbable.Position.Metaclass, id, update);
-
-                            // EntityId roadNodeEntityID;
-                            // if(nodeIdToEntityIdDict.TryGetValue(newNode.Id, out roadNodeEntityID)) {
-                            //     var roadNodeUpdate = Improbable.Metadata.Update.FromInitialData(new MetadataData("Current Node"));
-                            //     ClassConnection.SendComponentUpdate(Improbable.Metadata.Metaclass, roadNodeEntityID, roadNodeUpdate);
-                            //     previousRoadNodeID = roadNodeEntityID;
-                            // } else {
-                            //     connection.SendLogMessage(LogLevel.Info, LoggerName, "Couldn't get road node entity id");
-                            // }
+                            ClassConnection.SendComponentUpdate(Improbable.Position.Metaclass, carEntityIds[i], update);
                         }
                         timer.Restart();
                         firstIteration = false;
@@ -320,17 +329,9 @@ namespace Managed
             }
         }
 
-        // private static void GetCarsCallback(EntityQueryResponseOp response) {
-        //     foreach(var entityKV in response.Result)entityType
-        //         Improbable.Worker.Entity entity = entityKV.Value;
-        //         Improbable.Worker.EntityId entityId = entityKV.Key;
-        //         if(entity.Get<Improbable.Position>().HasValue)
-        //         {
-        //             Improbable.Position currentPosition = entity.Get<Improbable.Position>().Value.Value;
-        //             var update = Improbable.Position.Update.FromInitialData(new Improbable.PositionData(new Improbable.Coordinates(7, 7, 7)));
-        //             ClassConnection.SendComponentUpdate(Improbable.Position.Metaclass, entityId, update);
-        //         }
-        //     }            
-        // }
+        private static double CoordsDist(Coordinates coords1, Coordinates coords2) {
+            return Math.Sqrt(Math.Pow(coords1.x - coords2.x, 2) + Math.Pow(coords1.y - coords2.y, 2));
+        }
     }
+
 }
