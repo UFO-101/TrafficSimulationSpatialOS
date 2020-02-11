@@ -10,6 +10,7 @@ build
 ci
 logs
 .vscode
+workers/Managed/spatialos.Managed.worker.json
 
 # C# worker auto-generated project files
 spatialos.csharp.build.json
