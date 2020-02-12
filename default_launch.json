@@ -36,6 +36,21 @@
           "components": ["*"]
         }
       }]
+    },
+    {
+      "worker_type": "External",
+      "permissions": [{
+        "entity_creation": {
+          "allow": false
+        },
+        "entity_deletion": {
+          "allow": false
+        },
+        "entity_query": {
+          "allow": true,
+          "components": ["*"]
+        }
+      }]
     }
   ]
 }

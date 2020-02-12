@@ -124,8 +124,6 @@ namespace Managed
 
                 EntityId id;
                 EntityId previousRoadNodeID = new EntityId(232242);
-                //Coordinates startPos, newPos;//, newNodePos;
-                //double xRatio, zRatio;
                 Random random = new Random();
                 bool firstIteration = true;
 
@@ -177,7 +175,6 @@ namespace Managed
                                 newPathSegmentLength = Coords.Dist(carPos, pathCoords.Last());
                                 OsmWay currentRoadWay = mapReader.ways[carRoadIds[i]];
                                 double maxPathLength = MilesPerHoursTo10metersPerTimeInterval(currentRoadWay.SpeedLimit);
-                                //ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "current road speed limit: " + maxPathLength);
                                 if(pathLength + newPathSegmentLength > maxPathLength) {
                                     double correctSegmentLength = maxPathLength - pathLength;
                                     Coordinates currentDirection = Coords.Subtract(pathCoords.Last(), carPos);
