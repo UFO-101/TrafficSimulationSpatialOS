@@ -13,7 +13,7 @@ component Car {
     Vector3f direction = 2;
 }
 
-component OsmWay {
+component OsmRoad {
     id=1003;
     list<EntityId> nodes = 1;
 }

@@ -16,9 +16,9 @@ namespace Managed
     internal class Startup
     {
         // Simulation parameters
-        private const double carSpeed = 4;
-        private const double upateInterval = 0.05;
-        private const int numberOfCars = 10;
+        //private const double carSpeed = 1;
+        private const double upateInterval = 0.2;
+        private const int numberOfCars = 300;
 
         // SpatialOS necesities
         private const string WorkerType = "Managed";
@@ -33,11 +33,12 @@ namespace Managed
         // My utility variables
         private static List<EntityId> carEntityIds = new List<EntityId>();
         private static List<Coordinates> carPositions = new List<Coordinates>();
+        private static List<ulong> carRoadIds = new List<ulong>();
+        private static List<ulong> carNodeIds = new List<ulong>(); // The current node that each car is aiming
+        private static List<ulong> prevCarNodeIds = new List<ulong>(); // The node that the car is coming from
 
         private static MapReader mapReader = new MapReader();
         //private static List<int> carNodeIndices = new List<int>();
-        private static List<ulong> prevCarNodeIds = new List<ulong>();
-        private static List<ulong> carNodeIds = new List<ulong>();
         private static List<ulong> roadNodeIds = new List<ulong>();
         private static Map<RequestId<CreateEntityRequest>, ulong> requestIdToNodeIdDict = new Map<RequestId<CreateEntityRequest>, ulong>();
         private static Map<ulong, EntityId> nodeIdToEntityIdDict = new Map<ulong, EntityId>();
@@ -74,7 +75,7 @@ namespace Managed
 
                 //MapReader mapReader = new MapReader();
                 try{
-                    string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + "warwick_uni_map.osm";//"sheen_map.osm";//
+                    string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + "sheen_map.osm";//"warwick_uni_map.osm";//
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "map file path: " + mapFilePath);
 
                     mapReader.Read(mapFilePath);
@@ -82,7 +83,7 @@ namespace Managed
 
                     dispatcher.OnCreateEntityResponse(EntityCreateCallback);
 
-                    foreach(OpenStreetMap.OsmWay way in mapReader.ways.Values.ToList()){
+                    foreach(OsmWay way in mapReader.ways.Values.ToList()){
                         if(way.IsRoad){
                             foreach(ulong nodeId in way.NodeIDs){
                                 OsmNode thisNode;
@@ -123,7 +124,7 @@ namespace Managed
 
                 EntityId id;
                 EntityId previousRoadNodeID = new EntityId(232242);
-                Coordinates startPos, newPos;//, newNodePos;
+                //Coordinates startPos, newPos;//, newNodePos;
                 //double xRatio, zRatio;
                 Random random = new Random();
                 bool firstIteration = true;
@@ -137,51 +138,66 @@ namespace Managed
                     {
                         for(int i = 0; i < carEntityIds.Count; i++)
                         {
-                            startPos = carPositions[i];
+                            Coordinates carPos = carPositions[i];
                             ulong startNode = carNodeIds[i];
                             List<Coordinates> pathCoords = new List<Coordinates>(new Coordinates[]{mapReader.nodes[startNode].coords});
                             List<ulong> pathNodes = new List<ulong>(new ulong[]{startNode});
+                            double newPathSegmentLength = 0;
                             double pathLength = 0;
+                            bool pastFirstNode = false;
+                            ulong nextNodeId = startNode;
+                            OsmNode nextNode = mapReader.nodes[nextNodeId];
+                            bool reachedSpeedLimit = false;
 
                             do {
-                                if(!firstIteration){
-                                    var reverseUpdate = Improbable.Metadata.Update.FromInitialData(new MetadataData("Road Node"));
-                                    ClassConnection.SendComponentUpdate(Improbable.Metadata.Metaclass, previousRoadNodeID, reverseUpdate);
-                                }
-
                                 id = carEntityIds[i];
                                 OsmNode currentCarNode;
                                 if(!mapReader.nodes.TryGetValue(pathNodes.Last(), out currentCarNode)) {
                                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find current car node");
                                 }
 
-                                bool newNodeInRoadNodes = false;
-                                ulong adjacentNodeId = 0;
-                                do{
-                                    adjacentNodeId = currentCarNode.adjacentNodes[random.Next(currentCarNode.adjacentNodes.Count)];
-                                    if(!mapReader.nodes.ContainsKey(adjacentNodeId)){
-                                        ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find adjacent node");
+                                // We need to pass the current node we're aiming for before proceeding to the next
+                                if(pastFirstNode){
+                                    do{
+                                        nextNodeId = currentCarNode.adjacentNodes[random.Next(currentCarNode.adjacentNodes.Count)];
+                                        if(!mapReader.nodes.ContainsKey(nextNodeId)){
+                                            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "couldn't find adjacent node");
+                                        }
+                                        if(!roadNodeIds.Contains(nextNodeId)){
+                                            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "adjacent node is not in road nodes");
+                                        }
                                     }
-                                    if(!roadNodeIds.Contains(adjacentNodeId)){
-                                        ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "adjacent node is not in road nodes");
-                                    }                                
-                                    newNodeInRoadNodes = roadNodeIds.Contains(adjacentNodeId);
+                                    while(nextNodeId == prevCarNodeIds[i] && currentCarNode.adjacentNodes.Count > 1);
+                                    prevCarNodeIds[i] = pathNodes.Last();
+                                    nextNode = mapReader.nodes[nextNodeId];
+                                    pathCoords.Add(nextNode.coords);
+                                    pathNodes.Add(nextNodeId);
                                 }
-                                while(adjacentNodeId == prevCarNodeIds[i] && currentCarNode.adjacentNodes.Count > 1);
 
-                                Coordinates newNodeCoords = mapReader.nodes[adjacentNodeId].coords;
-                                pathLength += CoordsDist(newNodeCoords, pathCoords.Last());
-                                pathCoords.Add(newNodeCoords);
-                                pathNodes.Add(adjacentNodeId);
+                                newPathSegmentLength = Coords.Dist(carPos, pathCoords.Last());
+                                OsmWay currentRoadWay = mapReader.ways[carRoadIds[i]];
+                                double maxPathLength = MilesPerHoursTo10metersPerTimeInterval(currentRoadWay.SpeedLimit);
+                                //ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "current road speed limit: " + maxPathLength);
+                                if(pathLength + newPathSegmentLength > maxPathLength) {
+                                    double correctSegmentLength = maxPathLength - pathLength;
+                                    Coordinates currentDirection = Coords.Subtract(pathCoords.Last(), carPos);
+                                    carPos = Coords.Add(carPos, Coords.ScaleToLength(currentDirection, correctSegmentLength));
+                                    pathLength += correctSegmentLength;
+                                    reachedSpeedLimit = true;
+                                } else {
+                                    pathLength += newPathSegmentLength;
+                                    carPos = nextNode.coords;
+                                }
+                                pastFirstNode = true;
                             }
-                            while(pathLength < carSpeed);
+                            while(!reachedSpeedLimit);
 
-                            prevCarNodeIds[i] = carNodeIds[i];
-                            carNodeIds[i] = pathNodes.Last();
-
-                            newPos = pathCoords.Last();
-                            carPositions[i] = newPos;
-                            var update = Improbable.Position.Update.FromInitialData(new PositionData(newPos));
+                            carNodeIds[i] = nextNodeId;
+                            if(!nextNode.waysOn.Contains(carRoadIds[i])) {
+                                carRoadIds[i] = nextNode.waysOn.First();
+                            }
+                            carPositions[i] = carPos;
+                            var update = Improbable.Position.Update.FromInitialData(new PositionData(carPos));
                             ClassConnection.SendComponentUpdate(Improbable.Position.Metaclass, carEntityIds[i], update);
                         }
                         timer.Restart();
@@ -283,7 +299,7 @@ namespace Managed
             entity.Add(Persistence.Metaclass, new PersistenceData());
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
             entity.Add(Position.Metaclass, new PositionData(coords));
-            entity.Add(Mapandcars.OsmWay.Metaclass, new OsmWayData(entityIds));
+            entity.Add(OsmRoad.Metaclass, new OsmRoadData(entityIds));
             connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
         }
 
@@ -304,6 +320,7 @@ namespace Managed
                     OsmNode roadNode;
                     if(mapReader.nodes.TryGetValue(roadNodeId, out roadNode)){
                         carPositions.Add(roadNode.coords);
+                        carRoadIds.Add(roadNode.waysOn.First());
                     } else {
                         ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Couldn't find road node in dictionary.");
                     }
@@ -329,8 +346,8 @@ namespace Managed
             }
         }
 
-        private static double CoordsDist(Coordinates coords1, Coordinates coords2) {
-            return Math.Sqrt(Math.Pow(coords1.x - coords2.x, 2) + Math.Pow(coords1.y - coords2.y, 2));
+        public static double MilesPerHoursTo10metersPerTimeInterval(int mph){
+            return ((mph * 1.60934) / (60*60)) * 100 * upateInterval * 2; //WHY times 2?
         }
     }
 

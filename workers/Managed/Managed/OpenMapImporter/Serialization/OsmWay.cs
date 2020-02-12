@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Xml;
 using System.Linq;
 
@@ -76,6 +77,8 @@ namespace OpenStreetMap
         /// </summary>
         public int Lanes { get; private set; }
 
+        public int SpeedLimit { get; private set; }
+
         /// <summary>
         /// Constructor.
         /// </summary>
@@ -86,6 +89,7 @@ namespace OpenStreetMap
             Height = 3.0f; // Default height for structures is 1 story (approx. 3m)
             Lanes = 1;      // Number of lanes either side of the divide 
             Name = "";
+            SpeedLimit = 25;
 
             // Get the data from the attributes
             ID = GetAttribute<ulong>("id", node.Attributes);
@@ -110,6 +114,7 @@ namespace OpenStreetMap
             bool serviceRoad = false;
             bool disqualifiedAsRoad = false;
             bool hasMaxspeed = false;
+            bool hasName = false;
             foreach (XmlNode t in tags)
             {
                 string key = GetAttribute<string>("k", t.Attributes);
@@ -140,6 +145,7 @@ namespace OpenStreetMap
                 }
                 else if (key=="name")
                 {
+                    hasName = true;
                     Name = GetAttribute<string>("v", t.Attributes);
                 }
                 else if (key=="access" && GetAttribute<string>("v", t.Attributes) == "no")
@@ -152,11 +158,15 @@ namespace OpenStreetMap
                 }
                 else if (key=="maxspeed")
                 {
-                    hasMaxspeed = true;
+                    hasMaxspeed = true;                    
+                    string maxSpeedStr = GetAttribute<string>("v", t.Attributes);
+                    char[] splitChars = {' '};
+                    string[] strArr = maxSpeedStr.Split(splitChars);
+                    SpeedLimit = Int32.Parse(strArr[0]);
                 }
 
             }
-            if(highway && !disqualifiedAsRoad && !(serviceRoad && !hasMaxspeed)){
+            if(highway && !disqualifiedAsRoad && (!serviceRoad || hasMaxspeed || hasName)){
                 IsRoad = true;
             }
         }
