@@ -5,7 +5,7 @@ package
 .spatialos
 improbable
 *.user
-*.csproj
+GeneratedCode.csproj
 build
 ci
 logs
