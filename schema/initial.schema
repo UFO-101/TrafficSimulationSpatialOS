@@ -17,3 +17,9 @@ component OsmRoad {
     id=1003;
     list<EntityId> nodes = 1;
 }
+
+component BusStop {
+    id = 1005;
+    string atco_code = 1;
+    string next_buses =2;
+}

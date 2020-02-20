@@ -62,6 +62,9 @@ namespace OpenStreetMap
 
         public List<ulong> waysOn { get; private set; } = new List<ulong>();
 
+        public bool isBusStop {get; private set; } = false;
+        public string actoCode {get; private set; }= "";
+
         // /// <summary>
         // /// Implicit conversion between OsmNode and Vector3.
         // /// </summary>
@@ -90,6 +93,24 @@ namespace OpenStreetMap
                 coords = new Coordinates(0,0,0);
             else
                 coords = new Coordinates(X - firstNode.X, 0, Y - firstNode.Y);
+
+            XmlNodeList tags = node.SelectNodes("tag");
+            foreach (XmlNode t in tags)
+            {
+                string key = GetAttribute<string>("k", t.Attributes);
+                if (key == "highway") {
+                    string value = GetAttribute<string>("v", t.Attributes);
+                    if(value == "bus_stop"){
+                        isBusStop = true;                        
+                    }
+                } else if (key == "naptan:AtcoCode") {
+                    string value = GetAttribute<string>("v", t.Attributes);
+                    actoCode = value;
+                }
+            }
+            if(isBusStop && actoCode == ""){
+                throw new System.Exception("Is bus stop but no actoCode");
+            }
         }
 
         public void addAdjacentNode(ulong adjacentNodeId)

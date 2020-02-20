@@ -30,6 +30,7 @@ namespace OpenStreetMap
     {
         public Dictionary<ulong, OsmNode> nodes;
         public Dictionary<ulong, OsmWay> ways;
+        public List<ulong> busStops;
         
         public OsmBounds bounds;
 
@@ -41,6 +42,8 @@ namespace OpenStreetMap
         {
             nodes = new Dictionary<ulong, OsmNode>();
             ways = new Dictionary<ulong, OsmWay>();
+            busStops = new List<ulong>();
+
 
             var xmlText = File.ReadAllText(resourceFile);//MapFile.mapdata;//
 
@@ -66,6 +69,9 @@ namespace OpenStreetMap
                 if(firstNode == null)
                     firstNode = node;
                 nodes[node.Id] = node;
+
+                if(node.isBusStop)
+                    busStops.Add(node.Id);
             }
         }
 
