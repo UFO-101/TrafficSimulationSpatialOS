@@ -11,7 +11,8 @@ using Improbable.Collections;
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.Security;
-using System.Web.Script.Serialization;
+using Newtonsoft.Json;
+// using System.Web.Script.Serialization;
 
 using OpenStreetMap;
 using Mapandcars;
@@ -266,16 +267,16 @@ namespace Managed
             return isOk;
         }
 
-        public object DeserializeJson<T>(string Json)
-        {
-            JavaScriptSerializer JavaScriptSerializer = new JavaScriptSerializer();
-            return JavaScriptSerializer.Deserialize<T>(Json);
-        }
+        // public object DeserializeJson<T>(string Json)
+        // {
+        //     JavaScriptSerializer JavaScriptSerializer = new JavaScriptSerializer();
+        //     return JavaScriptSerializer.Deserialize<T>(Json);
+        // }
 
         private static bool UpdateBusTimes()
         {
             if(!busStopsCreated){                
-                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Bus stops not created yet");
+                //ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Bus stops not created yet");
                 return false;
             }
             ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Updating bus times");
@@ -300,7 +301,7 @@ namespace Managed
                     json = reader.ReadToEnd();
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, json);
                 }
-                var o = DeserializeJson<>(json);
+                // var o = DeserializeJson<>(json);
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Recieved response: " + json);
 
                 EntityId entityId = new EntityId();
