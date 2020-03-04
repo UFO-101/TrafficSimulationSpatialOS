@@ -12,7 +12,6 @@ using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.Security;
 using Newtonsoft.Json;
-// using System.Web.Script.Serialization;
 
 using OpenStreetMap;
 using Mapandcars;
@@ -75,7 +74,10 @@ namespace Managed
                 }
             };
 
-            ServicePointManager.ServerCertificateValidationCallback = MyRemoteCertificateValidationCallback;
+            dynamic d = JsonConvert.DeserializeObject("{number:1000, str:'string', array: [1,2,3,4,5,6]}");
+
+            //ServicePointManager.ServerCertificateValidationCallback = MyRemoteCertificateValidationCallback;
+            ServicePointManager.ServerCertificateValidationCallback += (o, cert, chain, errors) => true;
 
             using (var connection = ConnectWithReceptionist(args[1], Convert.ToUInt16(args[2]), args[3], connectionParameters))
             {
@@ -84,9 +86,9 @@ namespace Managed
                 ClassConnection = connection;
                 ClassDispatcher = dispatcher;
                 ClassIsConnected = isConnected;
-
-                //MapReader mapReader = new MapReader();
-                try{
+                
+                try
+                {
                     string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + "warwick_uni_map.osm";//"sheen_map.osm";//
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "map file path: " + mapFilePath);
 
@@ -135,7 +137,12 @@ namespace Managed
 
                 for(int i = 0; i < numberOfCars; i++)
                 {
-                    CreateCarEntity(dispatcher, connection);
+                    string type = "car";
+                    if(i % 30 == 0)
+                    {
+                        type = "bus";
+                    }
+                    CreateCarEntity(dispatcher, connection, type);
                 }       
 
                 dispatcher.OnDisconnect(op =>
@@ -151,15 +158,18 @@ namespace Managed
                 bool firstIteration = true;
 
                 Stopwatch timer = new Stopwatch();
+                Stopwatch busUpdateTimer = new Stopwatch();
                 timer.Start();
+                busUpdateTimer.Start();
 
                 bool updateBuses = true;
 
                 while (isConnected)
                 {
                     if(updateBuses){
-                        if(UpdateBusTimes()){
-                            updateBuses = false;
+                        if(UpdateBusTimes() && busUpdateTimer.Elapsed.TotalSeconds >= 1800)
+                        {
+                            busUpdateTimer.Restart();
                         }
                     }
                     if(timer.Elapsed.TotalSeconds >= upateInterval)
@@ -242,30 +252,30 @@ namespace Managed
             return ErrorExitStatus;
         }
 
-        public static bool MyRemoteCertificateValidationCallback(System.Object sender,
-            X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-        {
-            bool isOk = true;
-            // If there are errors in the certificate chain,
-            // look at each error to determine the cause.
-            if (sslPolicyErrors != SslPolicyErrors.None) {
-                for (int i=0; i<chain.ChainStatus.Length; i++) {
-                    if (chain.ChainStatus[i].Status == X509ChainStatusFlags.RevocationStatusUnknown) {
-                        continue;
-                    }
-                    chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
-                    chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-                    chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan (0, 1, 0);
-                    chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllFlags;
-                    bool chainIsValid = chain.Build ((X509Certificate2)certificate);
-                    if (!chainIsValid) {
-                        isOk = false;
-                        break;
-                    }
-                }
-            }
-            return isOk;
-        }
+        //public static bool MyRemoteCertificateValidationCallback(System.Object sender,
+        //    X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        //{
+        //    bool isOk = true;
+        //    // If there are errors in the certificate chain,
+        //    // look at each error to determine the cause.
+        //    if (sslPolicyErrors != SslPolicyErrors.None) {
+        //        for (int i=0; i<chain.ChainStatus.Length; i++) {
+        //            if (chain.ChainStatus[i].Status == X509ChainStatusFlags.RevocationStatusUnknown) {
+        //                continue;
+        //            }
+        //            chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
+        //            chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+        //            chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan (0, 1, 0);
+        //            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllFlags;
+        //            bool chainIsValid = chain.Build ((X509Certificate2)certificate);
+        //            if (!chainIsValid) {
+        //                isOk = false;
+        //                break;
+        //            }
+        //        }
+        //    }
+        //    return isOk;
+        //}
 
         // public object DeserializeJson<T>(string Json)
         // {
@@ -302,13 +312,28 @@ namespace Managed
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, json);
                 }
                 // var o = DeserializeJson<>(json);
+                dynamic d = JsonConvert.DeserializeObject(json);
+                string info = "";
+                foreach(var bus in d.departures)
+                {
+                    foreach (var departure in bus)
+                    {
+                        foreach (var departure_info in departure)
+                        {
+                            info += departure_info.line_name;
+                            info += " arrives at ";
+                            info += departure_info.best_departure_estimate;
+                            info += ". ";
+                        }
+                    }
+                }
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Recieved response: " + json);
 
                 EntityId entityId = new EntityId();
                 if(busStopIdToEntityIdDict.TryGetValue(busStopId, out entityId)){
-                    var update = BusStop.Update.FromInitialData(new BusStopData(actoCode, json));
+                    var update = BusStop.Update.FromInitialData(new BusStopData(actoCode, info));
                     ClassConnection.SendComponentUpdate(BusStop.Metaclass, entityId, update);
-                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Update bus stop with entity Id: " + entityId.Id + " with text: " + json);
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Update bus stop with entity Id: " + entityId.Id + " with text: " + info);
                 } else {
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Couldn't find bus stop id in dictionary");
                 }
@@ -344,9 +369,9 @@ namespace Managed
             return connection;
         }
 
-        private static void CreateCarEntity(Dispatcher dispatcher, Connection connection)
+        private static void CreateCarEntity(Dispatcher dispatcher, Connection connection, string name)
         {
-            const string entityType = "Car";            
+            string entityType = name;
             var entity = new Entity();
 
             // This requirement set matches any worker with the attribute "simulation".
