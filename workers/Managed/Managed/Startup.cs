@@ -167,9 +167,12 @@ namespace Managed
                 while (isConnected)
                 {
                     if(updateBuses){
-                        if(UpdateBusTimes() && busUpdateTimer.Elapsed.TotalSeconds >= 1800)
+                        if(busUpdateTimer.Elapsed.TotalSeconds >= 1800)
                         {
-                            busUpdateTimer.Restart();
+                            if(UpdateBusTimes())
+                            {
+                                busUpdateTimer.Restart();
+                            }
                         }
                     }
                     if(timer.Elapsed.TotalSeconds >= upateInterval)
