@@ -75,8 +75,6 @@ namespace Managed
                 }
             };
 
-            dynamic d = JsonConvert.DeserializeObject("{number:1000, str:'string', array: [1,2,3,4,5,6]}");
-
             //ServicePointManager.ServerCertificateValidationCallback = MyRemoteCertificateValidationCallback;
             ServicePointManager.ServerCertificateValidationCallback += (o, cert, chain, errors) => true;
 
@@ -138,8 +136,20 @@ namespace Managed
 
                 for(int i = 0; i < numberOfCars; i++)
                 {
-                    CreateCarEntity(dispatcher, connection, false, "");
-                }       
+                    RequestId<CreateEntityRequest> creationRequestId = CreateCarEntity(dispatcher, connection, false, "");
+                    carCreationRequestIds.Add(creationRequestId);
+                }
+
+                UpdateBusesOnMap();
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Buses on map count: " + busVehicleIds.Count);
+                foreach (string busVehicleId in busVehicleIds)
+                {
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Creating bus: " + busVehicleId);
+                    RequestId<CreateEntityRequest> creationRequestId = CreateCarEntity(dispatcher, connection, true, busVehicleId);
+                    carCreationRequestIds.Add(creationRequestId);
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Creation request id: " + creationRequestId.ToString());
+                    requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
+                }
 
                 dispatcher.OnDisconnect(op =>
                 {
@@ -148,33 +158,26 @@ namespace Managed
                     ClassIsConnected = isConnected;
                 });
 
-                UpdateBusesOnMap();
-                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Buses on map count: " + busVehicleIds.Count);
-                foreach (string busVehicleId in busVehicleIds)
-                {
-                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Creating bus: " + busVehicleId);
-                    CreateCarEntity(dispatcher, connection, true, busVehicleId);
-                }
-                
                 Stopwatch busUpdateTimer = new Stopwatch();
                 busUpdateTimer.Start();
-                while (true)
-                {
-                    if (busUpdateTimer.Elapsed.TotalSeconds >= 1)
-                    {
-                        busUpdateTimer.Restart();
-                        if (UpdateBusTimes())
-                        {
-                            break;
-                        }
-                    }
-                        
-                };
+                //while (true)
+                //{
+                //    if (busUpdateTimer.Elapsed.TotalSeconds >= 1)
+                //    {
+                //        busUpdateTimer.Restart();
+                //        if (UpdateBusTimes())
+                //        {
+                //            break;
+                //        }
+                //    }
+
+                //};
 
                 EntityId Id;
                 //EntityId previousRoadNodeID = new EntityId(232242);
                 Random random = new Random();
                 //bool firstIteration = true;
+                bool busTimesInitialised = false;
 
                 Stopwatch timer = new Stopwatch();
                 timer.Start();
@@ -183,6 +186,14 @@ namespace Managed
 
                 while (isConnected)
                 {
+                    if (!busTimesInitialised)
+                    {
+                        if (UpdateBusTimes())
+                        {
+                            busTimesInitialised = true;
+                        }
+                    }
+
                     if(updateBuses){
                         if(busUpdateTimer.Elapsed.TotalSeconds >= 1800)
                         {
@@ -313,9 +324,7 @@ namespace Managed
         {
             if(busVehicleIdToEntityIdDict.Count != busVehicleIds.Count)
             {
-                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Buses not created yet.");
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "busVehicleIdToEntityIdDict.Count. " + busVehicleIdToEntityIdDict.Count + " busVehicleIds.Count: " + busVehicleIds.Count);
-                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "requestIdToBus." + requestIdToBusVehicleIdDict.Count); 
                 return false;
             }
 
@@ -392,7 +401,7 @@ namespace Managed
             return connection;
         }
 
-        private static void CreateCarEntity(Dispatcher dispatcher, Connection connection, bool bus, string busVehicleId)
+        private static RequestId<CreateEntityRequest> CreateCarEntity(Dispatcher dispatcher, Connection connection, bool bus, string busVehicleId)
         {
             string entityType = bus? "Bus" : "Car";
             var entity = new Entity();
@@ -419,11 +428,15 @@ namespace Managed
             entity.Add(Car.Metaclass, new CarData(1.0f, new Vector3f(1.0f, 0.0f, 1.0f)));
             if (bus)
                 entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new List<uint>()));
-            
-            RequestId<CreateEntityRequest> creationRequestId = connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
-            carCreationRequestIds.Add(creationRequestId);
-            if (bus)
-                requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
+
+            return connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
+            //RequestId<CreateEntityRequest> creationRequestId = connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
+            //carCreationRequestIds.Add(creationRequestId);
+            //if (bus)
+            //{
+            //    connection.SendLogMessage(LogLevel.Info, LoggerName, "Adding request to dictionary for buses");
+            //    requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
+            //}
         }
 
         private static RequestId<CreateEntityRequest> CreateOsmNodeEntity(Dispatcher dispatcher, Connection connection, string name, Coordinates coords)
@@ -478,9 +491,10 @@ namespace Managed
         }
 
         private static void EntityCreateCallback(CreateEntityResponseOp response) {
-            if(carCreationRequestIds.Contains(response.RequestId)) {
+            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Entity Create Callback");
+            if (carCreationRequestIds.Contains(response.RequestId)) {
                 if(response.EntityId.HasValue) {
-                    EntityId entityId = response.EntityId.Value;                            
+                    EntityId entityId = response.EntityId.Value;
 
                     carEntityIds.Add(entityId);
 
@@ -503,8 +517,8 @@ namespace Managed
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Car was not created");
                 }
             }
-            
-            if(requestIdToNodeIdDict.ContainsKey(response.RequestId)) {
+            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Request id callback: " + response.RequestId.ToString());
+            if (requestIdToNodeIdDict.ContainsKey(response.RequestId)) {
                 if(response.EntityId.HasValue) {
                     EntityId entityId = response.EntityId.Value;
                     ulong roadNodeId = requestIdToNodeIdDict[response.RequestId];
