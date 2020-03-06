@@ -9,8 +9,8 @@ using Improbable.Worker;
 using Improbable.Collections;
 
 using System.Diagnostics;
-using System.Security.Cryptography.X509Certificates;
-using System.Net.Security;
+//using System.Security.Cryptography.X509Certificates;
+//using System.Net.Security;
 using Newtonsoft.Json;
 
 using OpenStreetMap;
@@ -47,10 +47,11 @@ namespace Managed
         //private static List<int> carNodeIndices = new List<int>();
         private static List<ulong> roadNodeIds = new List<ulong>();
         private static Map<RequestId<CreateEntityRequest>, ulong> requestIdToNodeIdDict = new Map<RequestId<CreateEntityRequest>, ulong>();
-        private static Map<RequestId<CreateEntityRequest>, ulong> requestIdToBusStopIdDict = new Map<RequestId<CreateEntityRequest>, ulong>();
+        private static Map<RequestId<CreateEntityRequest>, string> requestIdToBusVehicleIdDict = new Map<RequestId<CreateEntityRequest>, string>();
         private static Map<ulong, EntityId> nodeIdToEntityIdDict = new Map<ulong, EntityId>();
-        private static Map<ulong, EntityId> busStopIdToEntityIdDict = new Map<ulong, EntityId>();
-        private static bool busStopsCreated = false;
+        private static Map<string, EntityId> busVehicleIdToEntityIdDict = new Map<string, EntityId>();
+        private static System.Collections.Generic.HashSet<string> busVehicleIds = new System.Collections.Generic.HashSet<string>();
+        //private static bool busStopsCreated = false;
 
         private static List<RequestId<CreateEntityRequest>> carCreationRequestIds = new List<RequestId<CreateEntityRequest>>();
 
@@ -89,7 +90,7 @@ namespace Managed
                 
                 try
                 {
-                    string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + "warwick_uni_map.osm";//"sheen_map.osm";//
+                    string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + "sheen_map.osm";//"warwick_uni_map.osm";//
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "map file path: " + mapFilePath);
 
                     mapReader.Read(mapFilePath);
@@ -129,7 +130,7 @@ namespace Managed
                     OsmNode thisNode;
                     if(mapReader.nodes.TryGetValue(busStopId, out thisNode)) {
                         RequestId<CreateEntityRequest> busStopRequestId = CreateBusStopEntity(dispatcher, connection, "Bus stop", thisNode.coords, thisNode.actoCode);
-                        requestIdToBusStopIdDict.Add(busStopRequestId, busStopId);
+                        //requestIdToBusStopIdDict.Add(busStopRequestId, busStopId);
                     } else {
                         ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Couldn't find bus stop node by id");
                     }
@@ -137,12 +138,7 @@ namespace Managed
 
                 for(int i = 0; i < numberOfCars; i++)
                 {
-                    string type = "car";
-                    if(i % 30 == 0)
-                    {
-                        type = "bus";
-                    }
-                    CreateCarEntity(dispatcher, connection, type);
+                    CreateCarEntity(dispatcher, connection, false, "");
                 }       
 
                 dispatcher.OnDisconnect(op =>
@@ -152,15 +148,36 @@ namespace Managed
                     ClassIsConnected = isConnected;
                 });
 
+                UpdateBusesOnMap();
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Buses on map count: " + busVehicleIds.Count);
+                foreach (string busVehicleId in busVehicleIds)
+                {
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Creating bus: " + busVehicleId);
+                    CreateCarEntity(dispatcher, connection, true, busVehicleId);
+                }
+                
+                Stopwatch busUpdateTimer = new Stopwatch();
+                busUpdateTimer.Start();
+                while (true)
+                {
+                    if (busUpdateTimer.Elapsed.TotalSeconds >= 1)
+                    {
+                        busUpdateTimer.Restart();
+                        if (UpdateBusTimes())
+                        {
+                            break;
+                        }
+                    }
+                        
+                };
+
                 EntityId Id;
                 //EntityId previousRoadNodeID = new EntityId(232242);
                 Random random = new Random();
-                bool firstIteration = true;
+                //bool firstIteration = true;
 
                 Stopwatch timer = new Stopwatch();
-                Stopwatch busUpdateTimer = new Stopwatch();
                 timer.Start();
-                busUpdateTimer.Start();
 
                 bool updateBuses = true;
 
@@ -169,8 +186,9 @@ namespace Managed
                     if(updateBuses){
                         if(busUpdateTimer.Elapsed.TotalSeconds >= 1800)
                         {
-                            if(UpdateBusTimes())
+                            if(UpdateBusesOnMap())
                             {
+                                UpdateBusTimes();
                                 busUpdateTimer.Restart();
                             }
                         }
@@ -241,7 +259,7 @@ namespace Managed
                             ClassConnection.SendComponentUpdate(Improbable.Position.Metaclass, carEntityIds[i], update);
                         }
                         timer.Restart();
-                        firstIteration = false;
+                        //firstIteration = false;
                     }
 
                     using (var opList = connection.GetOpList(GetOpListTimeoutInMilliseconds))
@@ -255,53 +273,18 @@ namespace Managed
             return ErrorExitStatus;
         }
 
-        //public static bool MyRemoteCertificateValidationCallback(System.Object sender,
-        //    X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-        //{
-        //    bool isOk = true;
-        //    // If there are errors in the certificate chain,
-        //    // look at each error to determine the cause.
-        //    if (sslPolicyErrors != SslPolicyErrors.None) {
-        //        for (int i=0; i<chain.ChainStatus.Length; i++) {
-        //            if (chain.ChainStatus[i].Status == X509ChainStatusFlags.RevocationStatusUnknown) {
-        //                continue;
-        //            }
-        //            chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
-        //            chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-        //            chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan (0, 1, 0);
-        //            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllFlags;
-        //            bool chainIsValid = chain.Build ((X509Certificate2)certificate);
-        //            if (!chainIsValid) {
-        //                isOk = false;
-        //                break;
-        //            }
-        //        }
-        //    }
-        //    return isOk;
-        //}
-
-        // public object DeserializeJson<T>(string Json)
-        // {
-        //     JavaScriptSerializer JavaScriptSerializer = new JavaScriptSerializer();
-        //     return JavaScriptSerializer.Deserialize<T>(Json);
-        // }
-
-        private static bool UpdateBusTimes()
-        {
-            if(!busStopsCreated){                
-                //ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Bus stops not created yet");
-                return false;
-            }
-            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Updating bus times");
-            foreach(ulong busStopId in mapReader.busStops.GetRange(0, 3)){
-                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "In the loop");
+        private static bool UpdateBusesOnMap()
+        {            
+            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Updating bus list");
+            foreach (ulong busStopId in mapReader.busStops.GetRange(0, 3))
+            {
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "This bus stop is: " + busStopId);
                 OsmNode busStopNode = mapReader.nodes[busStopId];
                 string json = string.Empty;
                 string actoCode = busStopNode.actoCode;
-                string app_id = "2b66e982";
-                string app_key = "3fa93c59827b50d5d48dfcbf5c4898e7";
-                string url = @"https://transportapi.com/v3/uk/bus/stop/"+actoCode+"/live.json?app_id="+app_id+"&app_key="+app_key+"&group=route&nextbuses=yes";
+                string app_id = "d95991f2";
+                string app_key = "db59c31bd87e57bbe3512137ca40a450";
+                string url = @"https://api.tfl.gov.uk/StopPoint/"+actoCode+@"/Arrivals?app_id="+app_id+@"&app_key="+app_key;
 
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Sending request to: " + url);
 
@@ -315,28 +298,65 @@ namespace Managed
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, json);
                 }
                 // var o = DeserializeJson<>(json);
-                dynamic d = JsonConvert.DeserializeObject(json);
-                string info = "";
-                foreach(var bus in d.departures)
+                dynamic arrivals = JsonConvert.DeserializeObject(json);
+                foreach (var bus in arrivals)
                 {
-                    foreach (var departure in bus)
-                    {
-                        foreach (var departure_info in departure)
-                        {
-                            info += departure_info.line_name;
-                            info += " arrives at ";
-                            info += departure_info.best_departure_estimate;
-                            info += ". ";
-                        }
-                    }
+                    string vehicleId = bus.vehicleId;
+                    busVehicleIds.Add(vehicleId);
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Added bus: " + vehicleId);
+                }
+            }
+            return true;
+        }
+
+        private static bool UpdateBusTimes()
+        {
+            if(busVehicleIdToEntityIdDict.Count != busVehicleIds.Count)
+            {
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Buses not created yet.");
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "busVehicleIdToEntityIdDict.Count. " + busVehicleIdToEntityIdDict.Count + " busVehicleIds.Count: " + busVehicleIds.Count);
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "requestIdToBus." + requestIdToBusVehicleIdDict.Count); 
+                return false;
+            }
+
+            ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Updating bus times");
+            foreach(string busVehicleId in busVehicleIdToEntityIdDict.Keys.ToArray()){
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "This bus vehicle id is: " + busVehicleId);
+                string json = string.Empty;
+                string app_id = "d95991f2";
+                string app_key = "db59c31bd87e57bbe3512137ca40a450";
+                string url = @"https://api.tfl.gov.uk/Vehicle/" + busVehicleId + @"/Arrivals?app_id=" + app_id + @"&app_key=" + app_key;
+
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Sending request to: " + url);
+
+                HttpWebRequest request = WebRequest.CreateHttp(url);
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    json = reader.ReadToEnd();
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, json);
+                }
+                // var o = DeserializeJson<>(json);
+                dynamic arrivals = JsonConvert.DeserializeObject(json);
+                List<string> next_stops = new List<string>();
+                foreach(var arrival in arrivals)
+                {
+                    string info = "";
+                    info += arrival.station_name;
+                    info += " arrives at ";
+                    info += arrival.expectedArrival;
+                    info += ". ";
+                    next_stops.Add(info);
                 }
                 ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Recieved response: " + json);
 
                 EntityId entityId = new EntityId();
-                if(busStopIdToEntityIdDict.TryGetValue(busStopId, out entityId)){
-                    var update = BusStop.Update.FromInitialData(new BusStopData(actoCode, info));
-                    ClassConnection.SendComponentUpdate(BusStop.Metaclass, entityId, update);
-                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Update bus stop with entity Id: " + entityId.Id + " with text: " + info);
+                if(busVehicleIdToEntityIdDict.TryGetValue(busVehicleId, out entityId)){
+                    var update = Bus.Update.FromInitialData(new BusData(busVehicleId, next_stops, new List<uint>()));
+                    ClassConnection.SendComponentUpdate(Bus.Metaclass, entityId, update);
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Update bus stop with entity Id: " + entityId.Id + " with text: " + next_stops[0]);
                 } else {
                     ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Couldn't find bus stop id in dictionary");
                 }
@@ -372,9 +392,9 @@ namespace Managed
             return connection;
         }
 
-        private static void CreateCarEntity(Dispatcher dispatcher, Connection connection, string name)
+        private static void CreateCarEntity(Dispatcher dispatcher, Connection connection, bool bus, string busVehicleId)
         {
-            string entityType = name;
+            string entityType = bus? "Bus" : "Car";
             var entity = new Entity();
 
             // This requirement set matches any worker with the attribute "simulation".
@@ -387,6 +407,7 @@ namespace Managed
             {
                 {Position.ComponentId, basicWorkerRequirementSet},
                 {EntityAcl.ComponentId, basicWorkerRequirementSet},
+                {Bus.ComponentId, basicWorkerRequirementSet}
             };
             
             entity.Add(EntityAcl.Metaclass,
@@ -396,9 +417,13 @@ namespace Managed
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
             entity.Add(Position.Metaclass, new PositionData(new Coordinates(1, 2, 3)));
             entity.Add(Car.Metaclass, new CarData(1.0f, new Vector3f(1.0f, 0.0f, 1.0f)));
+            if (bus)
+                entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new List<uint>()));
             
             RequestId<CreateEntityRequest> creationRequestId = connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
             carCreationRequestIds.Add(creationRequestId);
+            if (bus)
+                requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
         }
 
         private static RequestId<CreateEntityRequest> CreateOsmNodeEntity(Dispatcher dispatcher, Connection connection, string name, Coordinates coords)
@@ -432,7 +457,7 @@ namespace Managed
             entity.Add(Persistence.Metaclass, new PersistenceData());
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
             entity.Add(Position.Metaclass, new PositionData(coords));
-            entity.Add(BusStop.Metaclass, new BusStopData(atcoCode, "no data!"));
+            entity.Add(BusStop.Metaclass, new BusStopData(atcoCode));
             return connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
         }
 
@@ -490,17 +515,18 @@ namespace Managed
                 }
             }
             
-            if(requestIdToBusStopIdDict.ContainsKey(response.RequestId)) {
-                if(response.EntityId.HasValue) {
-                    EntityId entityId = response.EntityId.Value;                            
-                    ulong busStopId = requestIdToBusStopIdDict[response.RequestId];
-                    busStopIdToEntityIdDict.Add(busStopId, entityId);
-                    if(requestIdToBusStopIdDict.Count == busStopIdToEntityIdDict.Count){
-                        busStopsCreated = true;
-                    }
+            if(requestIdToBusVehicleIdDict.ContainsKey(response.RequestId)) {
+                ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "This is the callback for the bus");
+                if (response.EntityId.HasValue) {
+                    EntityId entityId = response.EntityId.Value;
+                    string busVehicleId = requestIdToBusVehicleIdDict[response.RequestId];
+                    busVehicleIdToEntityIdDict.Add(busVehicleId, entityId);
+                    //if(requestIdToBusStopIdDict.Count == busStopIdToEntityIdDict.Count){
+                    //    busStopsCreated = true;
+                    //}
                 }
                 else {
-                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Bus stop was not created");
+                    ClassConnection.SendLogMessage(LogLevel.Info, LoggerName, "Bus was not created");
                 }
             }
         }

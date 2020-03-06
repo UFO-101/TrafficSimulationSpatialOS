@@ -18,8 +18,14 @@ component OsmRoad {
     list<EntityId> nodes = 1;
 }
 
-component BusStop {
+component Bus {
     id = 1005;
+    string vehicle_id = 1;
+    list<string> next_stops = 2;
+    list<uint32> arrival_estimate = 3;
+}
+
+component BusStop {
+    id = 1006;
     string atco_code = 1;
-    string next_buses =2;
 }
