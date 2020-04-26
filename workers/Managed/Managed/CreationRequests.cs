@@ -3,6 +3,8 @@ using Improbable;
 using Improbable.Worker;
 using Improbable.Collections;
 using Mapandcars;
+using System.Linq;
+using OpenStreetMap;
 
 namespace Managed
 {
@@ -31,8 +33,16 @@ namespace Managed
 
             entity.Add(Persistence.Metaclass, new PersistenceData());
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
-            entity.Add(Position.Metaclass, new PositionData(new Coordinates(1, 2, 3)));
-            entity.Add(Car.Metaclass, new CarData(1.0f, new Vector3f(1.0f, 0.0f, 1.0f)));
+
+            //Random random = new Random();
+            //ulong[] roadNodesArray = Startup.MapReader.roadNodes.ToArray();
+            //ulong roadNodeId = roadNodesArray[random.Next(0, roadNodesArray.Length)];
+            //OsmNode roadNode = Startup.MapReader.nodes[roadNodeId];
+            //Coordinates startCoords = roadNode.coords;
+            //ulong roadId = roadNode.waysOn.First();
+
+            entity.Add(Position.Metaclass, new PositionData(new Coordinates(0, -99.99, 0)));
+            entity.Add(Car.Metaclass, new CarData());
             if (bus)
                 entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new List<uint>()));
 

@@ -30,8 +30,9 @@ namespace OpenStreetMap
     {
         public Dictionary<ulong, OsmNode> nodes;
         public Dictionary<ulong, OsmWay> ways;
-        public List<ulong> busStops;
-        
+        public HashSet<ulong> busStops;
+        public HashSet<ulong> roadNodes;
+
         public OsmBounds bounds;
 
         /// <summary>
@@ -42,7 +43,8 @@ namespace OpenStreetMap
         {
             nodes = new Dictionary<ulong, OsmNode>();
             ways = new Dictionary<ulong, OsmWay>();
-            busStops = new List<ulong>();
+            busStops = new HashSet<ulong>();
+            roadNodes = new HashSet<ulong>();
 
 
             var xmlText = File.ReadAllText(resourceFile);//MapFile.mapdata;//
@@ -88,6 +90,7 @@ namespace OpenStreetMap
                 foreach(ulong nodeID in way.NodeIDs){
                     if(way.IsRoad){
                         nodes[nodeID].addWayOn(way.ID);
+                        roadNodes.Add(nodeID);
                         if(setPrevNode)
                         {
                             nodes[prevNode].addAdjacentNode(nodeID);

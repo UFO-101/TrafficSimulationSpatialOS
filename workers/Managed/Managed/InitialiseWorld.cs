@@ -28,8 +28,8 @@ namespace Managed
         }
 
 
-        public static List<ulong> createOsmNodes(MapReader mapReader, Dispatcher dispatcher, Connection connection) {
-            List<ulong> roadNodeIds = new List<ulong>();
+        public static void createOsmNodes(MapReader mapReader, Dispatcher dispatcher, Connection connection) {
+            List<ulong> createdRoadNodeIds = new List<ulong>();
             foreach (OsmWay way in mapReader.ways.Values.ToList()) {
                 if (way.IsRoad) {
                     foreach (ulong nodeId in way.NodeIDs) {
@@ -39,8 +39,8 @@ namespace Managed
                             if (thisNode.Id != nodeId) {
                                 Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Node ids don't match!");
                             }
-                            if (!roadNodeIds.Contains(nodeId)) {
-                                roadNodeIds.Add(nodeId);
+                            if (!createdRoadNodeIds.Contains(nodeId)) {
+                                createdRoadNodeIds.Add(nodeId);
                                 RequestId<CreateEntityRequest> roadNodeRequestId = CreationRequests.CreateOsmNodeEntity(dispatcher, connection, "Road Node", thisNode.coords);
                                 //requestIdToNodeIdDict.Add(roadNodeRequestId, nodeId);
                             }
@@ -53,7 +53,6 @@ namespace Managed
 
                 }
             }
-            return roadNodeIds;
         }
 
         public static void createBusStops(MapReader mapReader, Dispatcher dispatcher, Connection connection)
