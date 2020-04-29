@@ -22,6 +22,7 @@ namespace Managed
             var writeAcl = new Map<uint, WorkerRequirementSet>
                 {
                     {Position.ComponentId, basicWorkerRequirementSet},
+                    {Car.ComponentId, basicWorkerRequirementSet},
                     {EntityAcl.ComponentId, basicWorkerRequirementSet},
                     {Bus.ComponentId, basicWorkerRequirementSet}
                 };
@@ -32,7 +33,7 @@ namespace Managed
             entity.Add(Persistence.Metaclass, new PersistenceData());
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
             entity.Add(Position.Metaclass, new PositionData(new Coordinates(0, -99.99, 0)));
-            entity.Add(Car.Metaclass, new CarData());
+            entity.Add(Car.Metaclass, new CarData(99999, 99999, 99999));
             if (bus)
                 entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new List<uint>()));
 

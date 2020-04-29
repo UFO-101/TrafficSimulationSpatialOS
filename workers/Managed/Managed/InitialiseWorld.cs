@@ -15,14 +15,14 @@ namespace Managed
             try
             {
                 string mapFilePath = System.AppDomain.CurrentDomain.BaseDirectory + filename;//"warwick_uni_map.osm";//
-                Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "map file path: " + mapFilePath);
+                Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "map file path: " + mapFilePath);
 
                 mapReader.Read(mapFilePath);
-                Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Node list length: " + mapReader.nodes.Count);
+                Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Node list length: " + mapReader.nodes.Count);
             }
             catch (System.IO.FileNotFoundException)
             {
-                Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Can't read map file");
+                Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Can't read map file");
             }
             return mapReader;
         }
@@ -37,7 +37,7 @@ namespace Managed
                         if (mapReader.nodes.TryGetValue(nodeId, out thisNode))
                         {
                             if (thisNode.Id != nodeId) {
-                                Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Node ids don't match!");
+                                Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Node ids don't match!");
                             }
                             if (!createdRoadNodeIds.Contains(nodeId)) {
                                 createdRoadNodeIds.Add(nodeId);
@@ -45,7 +45,7 @@ namespace Managed
                                 //requestIdToNodeIdDict.Add(roadNodeRequestId, nodeId);
                             }
                         } else {
-                            Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Couldn't find road node by id");
+                            Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Couldn't find road node by id");
                         }
                     }
                 }
@@ -66,7 +66,7 @@ namespace Managed
                     //requestIdToBusStopIdDict.Add(busStopRequestId, busStopId);
                 }
                 else
-                    Startup.ClassConnection.SendLogMessage(LogLevel.Info, Startup.LoggerName, "Couldn't find bus stop node by id");
+                    Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Couldn't find bus stop node by id");
             }
         }
     }
