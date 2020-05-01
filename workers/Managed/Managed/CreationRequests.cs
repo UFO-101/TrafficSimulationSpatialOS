@@ -8,7 +8,17 @@ namespace Managed
 {
     internal class CreationRequests
     {
-        public static RequestId<CreateEntityRequest> CreateCarEntity(Dispatcher dispatcher, Connection connection, bool bus, string busVehicleId)
+        public static RequestId<CreateEntityRequest> CreateCarEntity(Dispatcher dispatcher, Connection connection)
+        {
+            return CreateVehicleEntity(dispatcher, connection, false, "");
+        }
+
+        public static RequestId<CreateEntityRequest> CreateBusEntity(Dispatcher dispatcher, Connection connection, string busVehicleId)
+        {
+            return CreateVehicleEntity(dispatcher, connection, true, busVehicleId);
+        }
+
+        private static RequestId<CreateEntityRequest> CreateVehicleEntity(Dispatcher dispatcher, Connection connection, bool bus, string busVehicleId)
         {
             string entityType = bus ? "Bus" : "Car";
             var entity = new Entity();
