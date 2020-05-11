@@ -6,8 +6,8 @@
       "snapshot_write_period_seconds": 0
     },
     "dimensions": {
-      "x_meters": 1500,
-      "z_meters": 1500
+      "x_meters": 3000,
+      "z_meters": 3000
     },
     "legacy_flags": [
       {

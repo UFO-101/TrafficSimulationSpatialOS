@@ -35,5 +35,14 @@ namespace Managed
             return Scale(Normalise(coords1), len);
         }
 
+        public static double DotProduct(Coordinates coords1, Coordinates coords2) {
+            return coords1.x * coords2.x + coords1.z * coords2.z;
+        }
+
+        public static double AngleBetween(Coordinates coords1, Coordinates coords2) {
+            double cosTheta = (DotProduct(coords1, coords2)) / (Length(coords1) * Length(coords2));
+            return Math.Acos(cosTheta);
+        }
+
     }
 }

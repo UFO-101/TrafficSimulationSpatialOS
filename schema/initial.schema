@@ -17,10 +17,14 @@ component Bus {
     id = 1005;
     string vehicle_id = 1;
     list<string> next_stops = 2;
-    list<uint32> arrival_estimate = 3;
+    map<string, string> stop_arrival_estimates = 3;
 }
 
 component BusStop {
     id = 1006;
     string atco_code = 1;
+    double origin_x = 2;
+    double origin_y = 3;
+    uint64 offset_x = 4;
+    uint64 offset_y = 5;
 }

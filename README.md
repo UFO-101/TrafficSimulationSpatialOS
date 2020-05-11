@@ -1,6 +1,26 @@
-# SpatialOS C# Blank project
+# SpatialOS London Bus Traffic Simulation
 
-## Quick start
+The source for both the server side simulation program and the client side map-view application are in this project.
+
+The server side simulation is called Managed
+The client side application is called External
+
+## Viewing my code
+
+The code files that I have written can be found in workers/Managed/Managed and workers/External/External
+
+
+
+## Building and launching
+
+The server and client can be run locally, although you may still to create your own SpatialOS account to authenticate
+
+Installing the requirments to build the project is a slightly complicated topic.
+Generally the easiest way is to install the SpatialOS tools: https://documentation.improbable.io/spatialos-tools/docs/windows-install
+And use VisualStudio for the build tools on Windows or JetBrains Rider on Mac and Linux
+
+Full details can be found here: https://documentation.improbable.io/sdks-and-data/docs/csharp-setup-and-installation
+
 
 Build the project and start it with the default launch configuration:
 ```
@@ -8,13 +28,16 @@ spatial worker build
 spatial local launch
 ```
 
-Connects a new instance of the C# External worker to a running local
+Connects a new instance of the client program to a running local
 deployment.
 ```
 spatial local worker launch External local
 ```
 
-See sections below for more details.
+
+
+
+Below is further information provided by Improbable:
 
 ## Troubleshooting
 

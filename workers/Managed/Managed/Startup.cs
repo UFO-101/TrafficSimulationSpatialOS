@@ -19,15 +19,14 @@ namespace Managed
     internal class Startup
     {
         // Simulation parameters
-        //private const double carSpeed = 1;
-        private const double upateInterval = 0.05;
-        private const int numberOfCars = 100;
+        public const double upateInterval = 2;
+        private const int numberOfCars = 4000;
 
         // SpatialOS necesities
         private const string WorkerType = "Managed";
         public const string StaticLogName = "Startup - Static";
         private const int ErrorExitStatus = 1;
-        private const uint GetOpListTimeoutInMilliseconds = 100;
+        private const uint GetOpListTimeoutInMilliseconds = 5000;
 
         public static bool staticVarsInitialised = false;
         public static Connection StaticConnection;
@@ -39,7 +38,7 @@ namespace Managed
 
         private static Map<RequestId<CreateEntityRequest>, string> requestIdToBusVehicleIdDict = new Map<RequestId<CreateEntityRequest>, string>();
         private static Map<string, EntityId> busVehicleIdToEntityIdDict = new Map<string, EntityId>();
-        private static System.Collections.Generic.HashSet<string> busVehicleIds = new System.Collections.Generic.HashSet<string>();
+        public static System.Collections.Generic.HashSet<string> busVehicleIds = new System.Collections.Generic.HashSet<string>();
 
         private static int Main(string[] args)
         {
@@ -70,7 +69,7 @@ namespace Managed
                 if(!staticVarsInitialised)
                 {
                     StaticConnection = connection;
-                    MapReader = InitialiseWorld.ReadMapFile("sheen_map.osm");
+                    MapReader = InitialiseWorld.ReadMapFile("south_west_london_map.osm");
                     staticVarsInitialised = true;
                 }
 
@@ -79,9 +78,6 @@ namespace Managed
                     InitialiseWorld.createOsmNodes(MapReader, dispatcher, connection);
                     InitialiseWorld.createBusStops(MapReader, dispatcher, connection);
                     CreateCars(dispatcher, connection);
-                    UpdateBusesList();
-                    connection.SendLogMessage(LogLevel.Info, workerId, "Buses on map count: " + busVehicleIds.Count);
-                    CreateBusesInList(dispatcher, connection);
                 }
 
                 dispatcher.OnDisconnect(op =>
@@ -91,20 +87,28 @@ namespace Managed
                     ClassIsConnected = isConnected;
                 });
 
+                Stopwatch initalBusUpdateTimer = new Stopwatch();
+                initalBusUpdateTimer.Start();
                 Stopwatch busUpdateTimer = new Stopwatch();
                 busUpdateTimer.Start();
                 Stopwatch timer = new Stopwatch();
                 timer.Start();
 
-                bool updateBuses = true;
                 while (isConnected)
                 {
-                    if(updateBuses && busUpdateTimer.Elapsed.TotalSeconds >= 300 && UpdateBusesList())
+                    if(initalBusUpdateTimer.Elapsed.TotalSeconds >= 20 || busUpdateTimer.Elapsed.TotalSeconds >= 120)
+                    {
+                        initalBusUpdateTimer.Reset();
+                        System.Collections.Generic.HashSet<string> newBusVehicleListIds = new System.Collections.Generic.HashSet<string>(UpdateBusesList(dispatcher));
+                        CreateNewBusesInList(dispatcher, connection, newBusVehicleListIds);
+                        busVehicleIds.Concat(newBusVehicleListIds);
+                        connection.SendLogMessage(LogLevel.Info, workerId, "Buses on map count: " + busVehicleIds.Count);
                         busUpdateTimer.Restart();
+                    }
 
                     if(timer.Elapsed.TotalSeconds >= upateInterval)
                     {
-                        MoveCars(connection, dispatcher);
+                        Movement.MoveCars(connection, dispatcher, MapReader);
                         timer.Restart();
                     }
 
@@ -120,18 +124,16 @@ namespace Managed
             return ErrorExitStatus;
         }
 
-        private static bool UpdateBusesList()
+        private static List<string> UpdateBusesList(WorkerView dispatcher)
         {            
-            StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "Updating bus list");
-            foreach (ulong busStopId in MapReader.busStops)
+            StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "Updating bus list - stop list length " + dispatcher.busStopAtcoCodes.Count);
+            List<string> newBusVehicleIds = new List<string>();
+            foreach (string atcoCode in dispatcher.busStopAtcoCodes.Values)
             {
-                OsmNode busStopNode = MapReader.nodes[busStopId];
                 string json = string.Empty;
-                string actoCode = busStopNode.actoCode;
                 string app_id = "d95991f2";
                 string app_key = "db59c31bd87e57bbe3512137ca40a450";
-                string url = @"https://api.tfl.gov.uk/StopPoint/"+actoCode+@"/Arrivals?app_id="+app_id+@"&app_key="+app_key;
-                StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "sending request to: " + url);
+                string url = @"https://api.tfl.gov.uk/StopPoint/"+atcoCode+@"/Arrivals?app_id="+app_id+@"&app_key="+app_key;
 
                 try
                 {
@@ -147,8 +149,12 @@ namespace Managed
                     dynamic arrivals = JsonConvert.DeserializeObject(json);
                     foreach (var bus in arrivals)
                     {
-                        string vehicleId = bus.vehicleId;
-                        busVehicleIds.Add(vehicleId);
+                        // Only create a bus if it is at most 5 minutes from at least 1 station
+                        if(bus.timeToStation < 300 && dispatcher.busStopAtcoCodes.ContainsValue((string)bus.naptanId))
+                        {
+                            string vehicleId = bus.vehicleId;
+                            newBusVehicleIds.Add(vehicleId);
+                        }
                     }
                 }
                 catch(WebException ex)
@@ -156,7 +162,7 @@ namespace Managed
                     StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "web exception - status " + ex.Status);
                 }
             }
-            return true;
+            return newBusVehicleIds;
         }
 
         public static void EntityCreateCallback(CreateEntityResponseOp response)
@@ -167,12 +173,56 @@ namespace Managed
                 {
                     EntityId entityId = response.EntityId.Value;
                     string busVehicleId = requestIdToBusVehicleIdDict[response.RequestId];
-                    busVehicleIdToEntityIdDict.Add(busVehicleId, entityId);
+                    busVehicleIdToEntityIdDict[busVehicleId] = entityId;
                     StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "Is A Bus");
                 }
                 else
                     StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "Bus was not created");
             }
+        }
+
+        public static bool BusOnMap(string busVehicleId)
+        {
+            string json = string.Empty;
+            string app_id = "d95991f2";
+            string app_key = "db59c31bd87e57bbe3512137ca40a450";
+            string url = @"https://api.tfl.gov.uk/Vehicle/" + busVehicleId + @"/Arrivals?app_id=" + app_id + @"&app_key=" + app_key;
+            StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "sending request to: " + url);
+
+            try
+            {
+                HttpWebRequest request = WebRequest.CreateHttp(url);
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    json = reader.ReadToEnd();
+                }
+
+                dynamic arrivals = JsonConvert.DeserializeObject(json);
+                List<string> nextStops = new List<string>();
+                Map<string, string> estimatedArrivals = new Map<string, string>();
+                foreach (var arrival in arrivals)
+                {
+                    string expectedArrival = (string)arrival.expectedArrival;
+                    estimatedArrivals[(string)arrival.naptanId] = expectedArrival;
+
+                    if (DateTime.Parse(expectedArrival, System.Globalization.CultureInfo.InvariantCulture).CompareTo(DateTime.UtcNow) > 0)
+                    {
+                        // This could be optimised
+                        if (!nextStops.Contains((string)arrival.naptanId))
+                            nextStops.Insert(nextStops.Count, (string)arrival.naptanId);
+                    }
+                }
+
+                return MapReader.busStops.ContainsKey(nextStops.First());
+            }
+            catch (WebException ex)
+            {
+                StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "web exception - status " + ex.Status);
+            }
+            return false;
         }
 
         public static bool UpdateBusTimes(Connection connection, WorkerView dispatcher, EntityId busEntityId)
@@ -200,19 +250,36 @@ namespace Managed
                     json = reader.ReadToEnd();
                 }
 
-                dynamic arrivals = JsonConvert.DeserializeObject(json);
-                List<string> next_stops = new List<string>();
+                dynamic arrivals = JsonConvert.DeserializeObject(json); 
+                List<string> nextStops = new List<string>();
+                dispatcher.busesNextStops.TryGetValue(busEntityId, out nextStops);
+                Map<string, string> estimatedArrivals = new Map<string, string>();
                 foreach(var arrival in arrivals)
                 {
-                    string info = "";
-                    info += arrival.station_name;
-                    info += " arrives at ";
-                    info += arrival.expectedArrival;
-                    info += ". ";
-                    next_stops.Add(info);
+                    if (!estimatedArrivals.ContainsKey((string)arrival.naptanId))
+                    {
+                        string expectedArrival = (string)arrival.expectedArrival;
+                        estimatedArrivals.Add(new System.Collections.Generic.KeyValuePair<string, string>((string)arrival.naptanId, expectedArrival));
+
+                        if (DateTime.Parse(expectedArrival, System.Globalization.CultureInfo.InvariantCulture).CompareTo(DateTime.UtcNow) > 0)
+                        {
+                            // This could be optimised
+                            if (!nextStops.Contains((string)arrival.naptanId))
+                                nextStops.Insert(nextStops.Count, (string)arrival.naptanId);
+                        }
+                    }
+                }
+                
+                if (!MapReader.busStops.ContainsKey(nextStops.First()))
+                {
+                    connection.SendDeleteEntityRequest(busEntityId, new Option<uint>());
+                    StaticConnection.SendLogMessage(LogLevel.Info, StaticLogName, "Bus stop " + nextStops.First() + " was not found on map, DELETING entity " + busEntityId);
+                    string vehicleId;
+                    if (dispatcher.busesVehicleIds.TryGetValue(busEntityId, out vehicleId))
+                        Startup.busVehicleIds.Remove(vehicleId);
                 }
 
-                var update = Bus.Update.FromInitialData(new BusData(busVehicleId, next_stops, new List<uint>()));
+                    var update = Bus.Update.FromInitialData(new BusData(busVehicleId, nextStops, estimatedArrivals));
                 StaticConnection.SendComponentUpdate(Bus.Metaclass, busEntityId, update);
             }
             catch (WebException ex)
@@ -254,132 +321,22 @@ namespace Managed
             }
         }
 
-        private static void CreateBusesInList(WorkerView dispatcher, Connection connection)
+        private static void CreateNewBusesInList(WorkerView dispatcher, Connection connection, System.Collections.Generic.HashSet<string> newBusVehicleIds)
         {
-            foreach (string busVehicleId in busVehicleIds)
+            foreach (string busVehicleId in newBusVehicleIds)
             {
-                RequestId<CreateEntityRequest> creationRequestId = CreationRequests.CreateBusEntity(dispatcher, connection, busVehicleId);
-                dispatcher.carCreationRequestIds.Add(creationRequestId);
-                requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
+                if (!busVehicleIds.Contains(busVehicleId))
+                {
+                    if (BusOnMap(busVehicleId))
+                    {
+                        RequestId<CreateEntityRequest> creationRequestId = CreationRequests.CreateBusEntity(dispatcher, connection, busVehicleId);
+                        dispatcher.carCreationRequestIds.Add(creationRequestId);
+                        requestIdToBusVehicleIdDict.Add(creationRequestId, busVehicleId);
+                    }
+                }
             }
         }
 
-        private static void MoveCars(Connection connection, WorkerView dispatcher)
-        {
-            Random random = new Random();
-            foreach (EntityId entityId in dispatcher.carsInAuthority)
-            {
-                Coordinates carPos;
-                if (!dispatcher.entityPositions.TryGetValue(entityId, out carPos))
-                    connection.SendLogMessage(LogLevel.Error, connection.GetWorkerId(), "No car position for entityId: " + entityId.ToString());
-                ulong currentNodeId;
-                if (!dispatcher.carNodeIds.TryGetValue(entityId, out currentNodeId))
-                {
-                    connection.SendLogMessage(LogLevel.Error, connection.GetWorkerId(), "No car node for entityId: " + entityId.ToString() + " - randomising");
-                    dispatcher.randomisePosition(entityId);
-                    continue;
-                }
-                ulong prevNodeId;
-                if (!dispatcher.prevCarNodeIds.TryGetValue(entityId, out prevNodeId))
-                    connection.SendLogMessage(LogLevel.Error, connection.GetWorkerId(), "No prev car node for entityId: " + entityId.ToString());
-                ulong currentRoadId;
-                if (!dispatcher.carRoadIds.TryGetValue(entityId, out currentRoadId))
-                    connection.SendLogMessage(LogLevel.Error, connection.GetWorkerId(), "No car road id for entityId: " + entityId.ToString());
-                ulong newCurrentNodeId = currentNodeId;//carNodeIds[i];
-                ulong newPrevNodeId = prevNodeId;
-                ulong newCurrentRoadId = currentRoadId;
-
-                if(currentRoadId == 0)
-                    connection.SendLogMessage(LogLevel.Error, connection.GetWorkerId(), "currentNodeId: " + currentNodeId + " prevNodeId: " + prevNodeId + " currentRoadId: " + currentRoadId + " for entityId: " + entityId.ToString());
-
-                List<Coordinates> pathCoords = new List<Coordinates>(new Coordinates[] { MapReader.nodes[currentNodeId].coords });
-                List<ulong> pathNodes = new List<ulong>(new ulong[] { currentNodeId });
-                double newPathSegmentLength = 0;
-                double pathLength = 0;
-                bool pastFirstNode = false;
-                ulong nextNodeId = currentNodeId;
-                OsmNode nextNode = MapReader.nodes[nextNodeId];
-                bool reachedSpeedLimit = false;
-                do {
-                    OsmNode currentCarNode;
-                    if (!MapReader.nodes.TryGetValue(pathNodes.Last(), out currentCarNode))
-                    {
-                        connection.SendLogMessage(LogLevel.Info, connection.GetWorkerId(), "couldn't find current car node");
-                    }
-
-                    // We need to pass the current node we're aiming for before proceeding to the next
-                    if (pastFirstNode)
-                    {
-                        List<ulong> attemptedNodes = new List<ulong>();
-                        do
-                        {
-                            int highestSpeedLimit = 0;
-                            nextNodeId = currentCarNode.adjacentNodes[0];
-                            foreach (ulong nodeId in currentCarNode.adjacentNodes)
-                            {
-                                OsmNode node = MapReader.nodes[nodeId];
-                                foreach (ulong wayId in node.waysOn)
-                                {
-                                    OsmWay way = MapReader.ways[wayId];
-                                    int limit = way.SpeedLimit;
-                                    if (limit > highestSpeedLimit && !attemptedNodes.Contains(nodeId) && random.NextDouble() < 0.7)
-                                    {
-                                        highestSpeedLimit = limit;
-                                        nextNodeId = nodeId;
-                                    }
-                                }
-                            }
-                            attemptedNodes.Add(nextNodeId);
-                            if (!MapReader.nodes.ContainsKey(nextNodeId))
-                            {
-                                connection.SendLogMessage(LogLevel.Info, connection.GetWorkerId(), "couldn't find adjacent node");
-                            }
-                            if (!MapReader.roadNodes.Contains(nextNodeId))
-                            {
-                                connection.SendLogMessage(LogLevel.Info, connection.GetWorkerId(), "adjacent node is not in road nodes");
-                            }
-                        }
-                        while (nextNodeId == prevNodeId && currentCarNode.adjacentNodes.Count > 1);
-                        newPrevNodeId = pathNodes.Last();
-                        nextNode = MapReader.nodes[nextNodeId];
-                        pathCoords.Add(nextNode.coords);
-                        pathNodes.Add(nextNodeId);
-                    }
-
-                    newPathSegmentLength = Coords.Dist(carPos, pathCoords.Last());
-                    OsmWay currentRoadWay = MapReader.ways[currentRoadId];
-                    double maxPathLength = MilesPerHoursTo10metersPerTimeInterval(currentRoadWay.SpeedLimit);
-                    if (pathLength + newPathSegmentLength > maxPathLength)
-                    {
-                        double correctSegmentLength = maxPathLength - pathLength;
-                        Coordinates currentDirection = Coords.Subtract(pathCoords.Last(), carPos);
-                        carPos = Coords.Add(carPos, Coords.ScaleToLength(currentDirection, correctSegmentLength));
-                        pathLength += correctSegmentLength;
-                        reachedSpeedLimit = true;
-                    }
-                    else
-                    {
-                        pathLength += newPathSegmentLength;
-                        carPos = nextNode.coords;
-                    }
-                    pastFirstNode = true;
-                }
-                while (!reachedSpeedLimit);
-                newCurrentNodeId = nextNodeId;
-                if (!nextNode.waysOn.Contains(currentRoadId))
-                {
-                    newCurrentRoadId = nextNode.waysOn.First();
-                }
-                var positionComponentUpdate = Position.Update.FromInitialData(new PositionData(carPos));
-                var carComponentUpdate = Car.Update.FromInitialData(new CarData(newCurrentNodeId, newPrevNodeId, newCurrentRoadId));
-                connection.SendComponentUpdate(Position.Metaclass, entityId, positionComponentUpdate); // short curcuits by default
-                connection.SendComponentUpdate(Car.Metaclass, entityId, carComponentUpdate);
-            }
-        }
-
-        public static double MilesPerHoursTo10metersPerTimeInterval(int mph){
-            return ((mph * 1.60934) / (60*60)) * 100 * upateInterval; // But is this actually right?
-        }
     }
 
 }

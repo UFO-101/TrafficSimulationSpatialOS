@@ -49,12 +49,12 @@ namespace OpenStreetMap
         /// <summary>
         /// Unity unit X-co-ordinate.
         /// </summary>
-        public float X { get; private set; }
+        public double X { get; private set; }
 
         /// <summary>
         /// Unity unit Y-co-ordinate.
         /// </summary>
-        public float Y { get; private set; }
+        public double Y { get; private set; }
 
         public Coordinates coords { get; private set; }
 
@@ -86,13 +86,13 @@ namespace OpenStreetMap
             Longitude = GetAttribute<float>("lon", node.Attributes);
 
             // Calculate the position in Unity units
-            X = (float)MercatorProjection.lonToX(Longitude) * 0.1f;
-            Y = (float)MercatorProjection.latToY(Latitude) * 0.1f;
-
+            X = MercatorProjection.lonToX(Longitude) * 0.1f;
+            Y = MercatorProjection.latToY(Latitude) * 0.1f;
+            
             if(firstNode == null)
-                coords = new Coordinates(0,0,0);
+                coords = new Coordinates(MapReader.offsetX,0, MapReader.offsetY);
             else
-                coords = new Coordinates(X - firstNode.X, 0, Y - firstNode.Y);
+                coords = new Coordinates((X - firstNode.X) + MapReader.offsetX, 0, (Y - firstNode.Y) + MapReader.offsetY);
 
             XmlNodeList tags = node.SelectNodes("tag");
             foreach (XmlNode t in tags)
@@ -109,7 +109,8 @@ namespace OpenStreetMap
                 }
             }
             if(isBusStop && actoCode == ""){
-                throw new System.Exception("Is bus stop but no actoCode");
+                //throw new System.Exception("Is bus stop but no actoCode: node " + Id);
+                isBusStop = false;
             }
         }
 

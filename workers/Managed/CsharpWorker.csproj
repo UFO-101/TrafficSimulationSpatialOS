@@ -36,6 +36,7 @@
     <Compile Include="Managed\WorkerView.cs" />
     <Compile Include="Managed\OpenMapImporter\*.cs" />
     <Compile Include="Managed\OpenMapImporter\Serialization\*.cs" />
+    <Compile Include="Managed\Movement.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

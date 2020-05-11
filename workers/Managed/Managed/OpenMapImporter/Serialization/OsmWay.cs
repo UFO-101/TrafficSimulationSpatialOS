@@ -40,7 +40,7 @@ namespace OpenStreetMap
         /// <summary>
         /// True if visible.
         /// </summary>
-        public bool Visible { get; private set; }
+        // public bool Visible { get; private set; }
 
         /// <summary>
         /// List of node IDs.
@@ -65,7 +65,7 @@ namespace OpenStreetMap
         /// <summary>
         /// Height of the structure.
         /// </summary>
-        public float Height { get; private set; }
+        //public float Height { get; private set; }
 
         /// <summary>
         /// The name of the object.
@@ -86,14 +86,14 @@ namespace OpenStreetMap
         public OsmWay(XmlNode node)
         {
             NodeIDs = new List<ulong>();
-            Height = 3.0f; // Default height for structures is 1 story (approx. 3m)
+            //Height = 3.0f; // Default height for structures is 1 story (approx. 3m)
             Lanes = 1;      // Number of lanes either side of the divide 
             Name = "";
             SpeedLimit = 25;
 
             // Get the data from the attributes
             ID = GetAttribute<ulong>("id", node.Attributes);
-            Visible = GetAttribute<bool>("visible", node.Attributes);
+            // Visible = GetAttribute<bool>("visible", node.Attributes);
 
             // Get the nodes
             XmlNodeList nds = node.SelectNodes("nd");
@@ -118,15 +118,15 @@ namespace OpenStreetMap
             foreach (XmlNode t in tags)
             {
                 string key = GetAttribute<string>("k", t.Attributes);
-                if (key == "building:levels")
-                {
-                    Height = 3.0f * GetAttribute<float>("v", t.Attributes);
-                }
-                else if (key == "height")
-                {
-                    Height = 0.3048f * GetAttribute<float>("v", t.Attributes);
-                }
-                else if (key == "building")
+                //if (key == "building:levels")
+                //{
+                //    Height = 3.0f * GetAttribute<float>("v", t.Attributes); //int?
+                //}
+                //else if (key == "height")
+                //{
+                //    Height = 0.3048f * GetAttribute<float>("v", t.Attributes);
+                //}
+                if (key == "building")
                 {
                     IsBuilding = true;
                 }

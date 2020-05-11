@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace OpenStreetMap
+namespace External
 {
     /// <summary>
     /// C# Implementation by Florian Müller, based on the C code published at

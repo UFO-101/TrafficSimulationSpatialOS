@@ -42,7 +42,6 @@ namespace Managed
                             if (!createdRoadNodeIds.Contains(nodeId)) {
                                 createdRoadNodeIds.Add(nodeId);
                                 RequestId<CreateEntityRequest> roadNodeRequestId = CreationRequests.CreateOsmNodeEntity(dispatcher, connection, "Road Node", thisNode.coords);
-                                //requestIdToNodeIdDict.Add(roadNodeRequestId, nodeId);
                             }
                         } else {
                             Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Couldn't find road node by id");
@@ -57,13 +56,12 @@ namespace Managed
 
         public static void createBusStops(MapReader mapReader, Dispatcher dispatcher, Connection connection)
         {
-            foreach (ulong busStopId in mapReader.busStops)
+            foreach (ulong busStopId in mapReader.busStops.Values)
             {
                 OsmNode thisNode;
                 if (mapReader.nodes.TryGetValue(busStopId, out thisNode))
                 {
                     RequestId<CreateEntityRequest> busStopRequestId = CreationRequests.CreateBusStopEntity(dispatcher, connection, "Bus stop", thisNode.coords, thisNode.actoCode);
-                    //requestIdToBusStopIdDict.Add(busStopRequestId, busStopId);
                 }
                 else
                     Startup.StaticConnection.SendLogMessage(LogLevel.Info, Startup.StaticLogName, "Couldn't find bus stop node by id");

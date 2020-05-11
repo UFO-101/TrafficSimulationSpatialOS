@@ -30,10 +30,16 @@ namespace OpenStreetMap
     {
         public Dictionary<ulong, OsmNode> nodes;
         public Dictionary<ulong, OsmWay> ways;
-        public HashSet<ulong> busStops;
+        public Dictionary<string, ulong> busStops;
+        public Dictionary<ulong, ulong> nearestRoadNodesToBusStops;
         public HashSet<ulong> roadNodes;
 
         public OsmBounds bounds;
+        
+        public static double originX;
+        public static double originY;
+        public static ulong offsetX = 500;
+        public static ulong offsetY = 300;
 
         /// <summary>
         /// Load the OpenMap data resource file.
@@ -43,7 +49,8 @@ namespace OpenStreetMap
         {
             nodes = new Dictionary<ulong, OsmNode>();
             ways = new Dictionary<ulong, OsmWay>();
-            busStops = new HashSet<ulong>();
+            busStops = new Dictionary<string, ulong>();
+            nearestRoadNodesToBusStops = new Dictionary<ulong, ulong>();
             roadNodes = new HashSet<ulong>();
 
 
@@ -55,6 +62,7 @@ namespace OpenStreetMap
             SetBounds(doc.SelectSingleNode("/osm/bounds"));
             GetNodes(doc.SelectNodes("/osm/node"));
             GetWays(doc.SelectNodes("/osm/way"));
+            setClosestNodes();
 
             float minx = (float)MercatorProjection.lonToX(bounds.MinLon);
             float maxx = (float)MercatorProjection.lonToX(bounds.MaxLon);
@@ -68,12 +76,16 @@ namespace OpenStreetMap
             foreach (XmlNode n in xmlNodeList)
             {
                 OsmNode node = new OsmNode(n, firstNode);
-                if(firstNode == null)
+                if (firstNode == null)
+                {
                     firstNode = node;
+                    originX = node.X;
+                    originY = node.Y;
+                }
                 nodes[node.Id] = node;
 
                 if(node.isBusStop)
-                    busStops.Add(node.Id);
+                    busStops[node.actoCode] = node.Id;
             }
         }
 
@@ -100,6 +112,28 @@ namespace OpenStreetMap
                         setPrevNode = true;
                     }
                 }
+            }
+        }
+
+
+        void setClosestNodes()
+        {
+            foreach(ulong busStopId in busStops.Values)
+            {
+                double shortestDistance = 9999999;
+                ulong bestNodeId = 0;
+                OsmNode busStopNode = nodes[busStopId];
+                foreach(ulong roadNodeId in roadNodes)
+                {
+                    OsmNode roadNode = nodes[roadNodeId];
+                    double distance = Managed.Coords.Dist(busStopNode.coords, roadNode.coords);
+                    if (distance < shortestDistance)
+                    {
+                        shortestDistance = distance;
+                        bestNodeId = roadNodeId;
+                    }
+                }
+                nearestRoadNodesToBusStops[busStopId] = bestNodeId;
             }
         }
 

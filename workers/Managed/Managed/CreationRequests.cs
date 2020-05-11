@@ -3,6 +3,7 @@ using Improbable;
 using Improbable.Worker;
 using Improbable.Collections;
 using Mapandcars;
+using OpenStreetMap;
 
 namespace Managed
 {
@@ -45,7 +46,7 @@ namespace Managed
             entity.Add(Position.Metaclass, new PositionData(new Coordinates(0, -99.99, 0)));
             entity.Add(Car.Metaclass, new CarData(99999, 99999, 99999));
             if (bus)
-                entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new List<uint>()));
+                entity.Add(Bus.Metaclass, new BusData(busVehicleId, new List<string>(), new Map<string, string>()));
 
             return connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
         }
@@ -81,7 +82,7 @@ namespace Managed
             entity.Add(Persistence.Metaclass, new PersistenceData());
             entity.Add(Metadata.Metaclass, new MetadataData(entityType));
             entity.Add(Position.Metaclass, new PositionData(coords));
-            entity.Add(BusStop.Metaclass, new BusStopData(atcoCode));
+            entity.Add(BusStop.Metaclass, new BusStopData(atcoCode, MapReader.originX, MapReader.originY, MapReader.offsetX, MapReader.offsetY));
             return connection.SendCreateEntityRequest(entity, new Option<EntityId>(), new Option<uint>());
         }
 
